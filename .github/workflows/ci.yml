@@ -4,43 +4,85 @@ on:
   push:
     branches: [ main ]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write   # para GHCR
+  id-token: write   # por si usas OIDC más adelante
+
 jobs:
   build-go:
+    name: Build & Test (Go - payments)
     runs-on: ubuntu-latest
     defaults:
-      run: { working-directory: services/payments }
+      run:
+        working-directory: services/payments
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: { go-version: '1.22' }
+        with: { go-version: '1.22', cache: true }
+      - name: Cache go build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ hashFiles('services/payments/go.sum') }}
       - run: go mod download
+      - run: go vet ./...
+      - run: go test ./... -coverprofile=coverage.out
       - run: go build ./...
-      - run: go test ./...
+      - name: Upload Go coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-go
+          path: services/payments/coverage.out
 
   build-jvm:
+    name: Build & Test (JVM - billing-sif)
     runs-on: ubuntu-latest
     defaults:
-      run: { working-directory: services/billing-sif }
+      run:
+        working-directory: services/billing-sif
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
-      - run: ./gradlew build --no-daemon
+      - name: Setup Gradle (cache)
+        uses: gradle/actions/setup-gradle@v3
+      - run: ./gradlew clean build --no-daemon
+      - name: Publish Test Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jvm-test-report
+          path: services/billing-sif/**/build/reports/tests/test
 
   build-node:
+    name: Build & Test (Node - bff-api)
     runs-on: ubuntu-latest
     defaults:
-      run: { working-directory: services/bff-api }
+      run:
+        working-directory: services/bff-api
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: '20' }
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: services/bff-api/package-lock.json
       - run: npm ci
+      - run: npm run lint --if-present
+      - run: npm test --if-present
       - run: npm run build
 
   security:
+    name: Seguridad (SAST/SCA + SBOM repo)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -52,7 +94,121 @@ jobs:
           format: table
           exit-code: '1'
           severity: CRITICAL,HIGH
-      - name: Generate SBOM
+      - name: Generate SBOM (SPDX) del repo
         uses: anchore/sbom-action@v0
         with:
-          artifact-name: sbom-spdx.json
+          artifact-name: sbom-repo-spdx.json
+
+  docker-images:
+    name: Build (y push) imágenes Docker
+    needs: [build-go, build-jvm, build-node, security]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: payments
+            context: services/payments
+            image: ghcr.io/${{ github.repository }}/payments
+          - id: billing-sif
+            context: services/billing-sif
+            image: ghcr.io/${{ github.repository }}/billing-sif
+          - id: bff-api
+            context: services/bff-api
+            image: ghcr.io/${{ github.repository }}/bff-api
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ matrix.image }}
+          tags: |
+            type=raw,value=sha-${{ github.sha }}
+            type=raw,enable=${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }},value=latest
+            type=ref,event=pr
+            type=raw,enable=${{ startsWith(github.ref, 'refs/tags/') }},value=${{ github.ref_name }}
+
+      - name: Build & (posible) Push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          format: table
+          ignore-unfixed: true
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+
+      - name: SBOM por imagen (SPDX)
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          artifact-name: sbom-${{ matrix.id }}-spdx.json
+
+      - name: Export image ref (sha tag)
+        run: echo "IMAGE_REF=${{ matrix.image }}:sha-${GITHUB_SHA}" >> $GITHUB_ENV
+
+  deploy-stage:
+    name: Deploy a Stage (Helm)
+    needs: [docker-images]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: stage
+      url: ${{ steps.set-url.outputs.url || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar kubectl y Helm
+        uses: azure/setup-kubectl@v4
+      - uses: azure/setup-helm@v4
+
+      - name: Configurar kubeconfig (stage)
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${KUBE_CONFIG_STAGE}" > $HOME/.kube/config
+        env:
+          KUBE_CONFIG_STAGE: ${{ secrets.KUBE_CONFIG_STAGE }}
+
+      - name: Short SHA
+        id: sha
+        run: echo "short=$(echo $GITHUB_SHA | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: Helm upgrade --install
+        run: |
+          helm upgrade --install psp deploy/chart \
+            -f deploy/values-stage.yaml \
+            --set payments.image.repository=ghcr.io/${{ github.repository }}/payments \
+            --set payments.image.tag=sha-${{ github.sha }} \
+            --set billingSif.image.repository=ghcr.io/${{ github.repository }}/billing-sif \
+            --set billingSif.image.tag=sha-${{ github.sha }} \
+            --set bff.image.repository=ghcr.io/${{ github.repository }}/bff-api \
+            --set bff.image.tag=sha-${{ github.sha }} \
+            --namespace psp --create-namespace
+
+      - name: Esperar rollout
+        run: |
+          kubectl -n psp rollout status deploy/payments --timeout=120s || exit 1
+          kubectl -n psp rollout status deploy/billing-sif --timeout=120s || exit 1
+          kubectl -n psp rollout status deploy/bff-api --timeout=120s || exit 1

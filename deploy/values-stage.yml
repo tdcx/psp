@@ -1,0 +1,72 @@
+namespace: psp
+
+global:
+  imagePullPolicy: IfNotPresent
+
+payments:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/OWNER/REPO/payments   # se sobreescribe por --set en CI
+    tag: "sha-LOCAL"                           # idem
+  service:
+    type: ClusterIP
+    port: 8080
+  env:
+    - name: LOG_LEVEL
+      value: info
+  envFromSecrets: []          # ejemplo: ["payments-secrets"]
+  resources:
+    requests: { cpu: "100m", memory: "128Mi" }
+    limits:   { cpu: "500m", memory: "512Mi" }
+  livenessProbe:
+    httpGet: { path: /health, port: 8080 }
+    initialDelaySeconds: 10
+    periodSeconds: 10
+  readinessProbe:
+    httpGet: { path: /ready, port: 8080 }
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+billingSif:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/OWNER/REPO/billing-sif # override en CI
+    tag: "sha-LOCAL"
+  service:
+    type: ClusterIP
+    port: 8080
+  env:
+    - name: JAVA_TOOL_OPTIONS
+      value: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
+  envFromSecrets: []          # ejemplo: ["billing-sif-secrets"]
+  resources:
+    requests: { cpu: "200m", memory: "512Mi" }
+    limits:   { cpu: "1000m", memory: "1Gi" }
+  livenessProbe:
+    httpGet: { path: /actuator/health/liveness, port: 8080 }
+    initialDelaySeconds: 20
+  readinessProbe:
+    httpGet: { path: /actuator/health/readiness, port: 8080 }
+    initialDelaySeconds: 10
+
+bff:
+  replicaCount: 2
+  image:
+    repository: ghcr.io/OWNER/REPO/bff-api     # override en CI
+    tag: "sha-LOCAL"
+  service:
+    type: ClusterIP
+    port: 3000
+  env:
+    - name: NODE_ENV
+      value: production
+  envFromSecrets: []           # ejemplo: ["bff-secrets"]
+  resources:
+    requests: { cpu: "100m", memory: "128Mi" }
+    limits:   { cpu: "500m", memory: "512Mi" }
+  livenessProbe:
+    httpGet: { path: /health, port: 3000 }
+    initialDelaySeconds: 10
+  readinessProbe:
+    httpGet: { path: /ready, port: 3000 }
+    initialDelaySeconds: 5

@@ -10,7 +10,7 @@ if ! command -v python3 >/dev/null; then echo "❌ Falta Python3"; exit 1; fi
 python3 - <<'PY'
 import csv, json, subprocess, sys, os
 
-csv_path = "docs/backlog/github_backlog.csv"
+csv_path = "docs/backlog/github_backlog-2.csv"
 
 # Carga milestones existentes (nombre -> número)
 repo = subprocess.check_output(["gh","repo","view","--json","nameWithOwner","-q",".nameWithOwner"]).decode().strip()
