@@ -1,1 +1,3 @@
-# psp
+# psp-platform
+
+Monorepo inicial.
