@@ -1,0 +1,46 @@
+Title,Body,Labels,Milestone
+[EPIC] E1 Infra & CI/CD,"Infraestructura base, CI/CD, Helm, políticas de admisión.","epic,e1-infra-and-ci-cd,phase:roadmap",Roadmap
+Repo monorepo,"Crear repo 'psp-platform' y subir estructura base (services/, charts/, infra/, docs/).","type:task,e1-infra-and-ci-cd,priority:high,infra,repo,bootstrap",E1 Infra & CI/CD
+Workflows CI,Pipeline por PR: build+test Go/Kotlin/TS; cache dependencias; artefactos.,"type:task,e1-infra-and-ci-cd,priority:high,ci,quality,automation",E1 Infra & CI/CD
+SAST/SCA/Trivy/Syft,"Añadir Semgrep (SAST), SCA de dependencias, Trivy (contenedores) y SBOM con Syft.","type:task,e1-infra-and-ci-cd,priority:high,security,sast,sca,containers",E1 Infra & CI/CD
+Firma imágenes (Cosign),Firmar imágenes en CI y verificar firma antes de desplegar.,"type:task,e1-infra-and-ci-cd,priority:medium,supply-chain,cosign",E1 Infra & CI/CD
+Registry & push,Configurar GHCR/ECR/GCR y push con etiquetas semver+sha.,"type:task,e1-infra-and-ci-cd,priority:medium,registry,release",E1 Infra & CI/CD
+Helm umbrella + subcharts,"Crear infra/helm y charts/{payments,billing-sif,bff-api} con probes y resources.","type:task,e1-infra-and-ci-cd,priority:high,helm,k8s,platform",E1 Infra & CI/CD
+Kyverno/OPA baseline,"Políticas: no :latest, no privileged, requests/limits obligatorios.","type:task,e1-infra-and-ci-cd,priority:high,policy,kyverno,opa",E1 Infra & CI/CD
+External Secrets Operator,Instalar ESE y ejemplo de secret desde KMS/Secret Manager.,"type:task,e1-infra-and-ci-cd,priority:medium,secrets,kms,k8s",E1 Infra & CI/CD
+[EPIC] E2 Seguridad & Claves,"KMS/HSM, crypto-kit, firma de imágenes, secrets.","epic,e2-seguridad-and-claves,phase:roadmap",Roadmap
+Diseño jerarquía de claves,CMK por región; KEK por tenant; DEK por uso; policy de rotación (90 días).,"type:task,e2-seguridad-and-claves,priority:high,kms,crypto,governance",E2 Seguridad & Claves
+Crypto-kit (Go),Librería AES-256-GCM + HMAC-SHA-256 + HKDF con API fácil.,"type:task,e2-seguridad-and-claves,priority:high,crypto,go,sdk",E2 Seguridad & Claves
+Crypto-kit (JVM),Librería equivalente para Kotlin/Java.,"type:task,e2-seguridad-and-claves,priority:high,crypto,jvm,sdk",E2 Seguridad & Claves
+Crypto-kit (TS/Node),Librería equivalente para TypeScript.,"type:task,e2-seguridad-and-claves,priority:medium,crypto,ts,sdk",E2 Seguridad & Claves
+Envelope encryption,"Implementar patrón envelope (guardar nonce, tag, wrapped_dek, enc_v).","type:task,e2-seguridad-and-claves,priority:high,crypto,envelope",E2 Seguridad & Claves
+mTLS interno,Cert-manager o mesh; certificados por servicio; renovación automática.,"type:task,e2-seguridad-and-claves,priority:medium,mtls,tls,platform",E2 Seguridad & Claves
+Cosign policy en despliegue,Rechazar despliegues de imágenes no firmadas.,"type:task,e2-seguridad-and-claves,priority:medium,supply-chain,kyverno",E2 Seguridad & Claves
+[EPIC] E3 Datos & Esquemas,"RLS, field-level encryption, particionado, schemas.","epic,e3-datos-and-esquemas,phase:roadmap",Roadmap
+Esquema sif_events,"Tabla append-only con prev_hash/curr_hash, particionado mensual, índices por merchant.","type:task,e3-datos-and-esquemas,priority:high,db,schema,sif",E3 Datos & Esquemas
+Esquema pii_customer,Tabla separada con campos AEAD y *_idx (HMAC) para búsquedas.,"type:task,e3-datos-and-esquemas,priority:high,db,pii,encryption",E3 Datos & Esquemas
+RLS por tenant,Políticas RLS: merchant_id = current_setting('app.tenant'). Tests de aislamiento.,"type:task,e3-datos-and-esquemas,priority:high,db,security,rls",E3 Datos & Esquemas
+Migraciones Flyway,Script V1..Vn para DB; pipeline que aplica migraciones automáticamente.,"type:task,e3-datos-and-esquemas,priority:high,db,migrations",E3 Datos & Esquemas
+JSON Canonicalization (JCS),Utilidad para canonicalizar payloads SIF antes de hash (RFC 8785).,"type:task,e3-datos-and-esquemas,priority:medium,sif,hash,jcs",E3 Datos & Esquemas
+Archivado WORM,Bucket S3 con Object Lock (compliance) + ciclo de vida de objetos.,"type:task,e3-datos-and-esquemas,priority:medium,s3,worm,compliance",E3 Datos & Esquemas
+[EPIC] E4 Core funcional,"Payments, Billing-SIF, BFF, Webhooks (HMAC).","epic,e4-core-funcional,phase:roadmap",Roadmap
+Payments: intents + idempotencia,Endpoint /v1/payment_intents; idempotencia por header; validaciones.,"type:task,e4-core-funcional,priority:high,payments,api,go",E4 Core funcional
+Payments: evento sin PII,"Emitir payments.auth.succeeded (key=merchant_id), schema validado.","type:task,e4-core-funcional,priority:high,kafka,events,no-pii",E4 Core funcional
+Billing-SIF: hash+QR,Calcular hash encadenado (JCS+SHA-256) y generar QR mínimo regulatorio.,"type:task,e4-core-funcional,priority:high,sif,qr,kotlin",E4 Core funcional
+Billing-SIF: outbox + SIF.Recorded,Patrón outbox y publisher al topic SIF.Recorded (sin PII).,"type:task,e4-core-funcional,priority:high,outbox,kafka",E4 Core funcional
+BFF: OIDC + rate limit + PII scrub,"Autenticación OIDC, extracción merchant_id, sanitización de PII.","type:task,e4-core-funcional,priority:high,bff,auth,security",E4 Core funcional
+Webhooks: entrega HMAC + reintentos,"Servicio de webhooks con firma HMAC, backoff y DLQ.","type:task,e4-core-funcional,priority:medium,webhooks,reliability",E4 Core funcional
+[EPIC] E5 Observabilidad & Operación,"Prometheus/Grafana, OTel, runbooks, SLO/alertas.","epic,e5-observabilidad-and-operacion,phase:roadmap",Roadmap
+Exposición /metrics,Métricas Prometheus en Go/Java/TS + labels (merchant_id cuando aplique).,"type:task,e5-observabilidad-and-operacion,priority:high,metrics,prometheus",E5 Observabilidad & Operación
+OTel tracing,Instrumentar spans BFF→Payments→Kafka→Billing-SIF→DB→Outbox.,"type:task,e5-observabilidad-and-operacion,priority:medium,tracing,otel",E5 Observabilidad & Operación
+Stack observabilidad,Desplegar Prometheus+Grafana+Loki+Tempo en dev/stage.,"type:task,e5-observabilidad-and-operacion,priority:high,grafana,platform",E5 Observabilidad & Operación
+Dashboards internos,"Paneles: funnel pago→SIF, outbox lag, Kafka lag, SLOs.","type:task,e5-observabilidad-and-operacion,priority:high,dashboards,slo",E5 Observabilidad & Operación
+Alertas SLO,"Burn-rate y umbrales para p95, error-rate, lag outbox/Kafka.","type:task,e5-observabilidad-and-operacion,priority:high,alerts,sre",E5 Observabilidad & Operación
+Runbooks críticos,"Procedimientos: AEAT/adquirente caído, DLQ, replays, DR.","type:task,e5-observabilidad-and-operacion,priority:high,ops,runbooks",E5 Observabilidad & Operación
+[EPIC] E6 Piloto & Go-to-market,"Integraciones reales, portal merchants, dispatcher AEAT (opcional).","epic,e6-piloto-and-go-to-market,phase:roadmap",Roadmap
+Integración adquirente,Conectar Redsys/u otro en sandbox/producción limitada (sin PAN).,"type:task,e6-piloto-and-go-to-market,priority:high,psp,acquirer,integration",E6 Piloto & Go-to-market
+Portal merchants v1,"UI con login OIDC, listado facturas, QR, export CSV.","type:task,e6-piloto-and-go-to-market,priority:medium,ui,portal,nextjs",E6 Piloto & Go-to-market
+Dashboard por merchant,KPIs de pagos/SIF/webhooks filtrados por tenant; exportes.,"type:task,e6-piloto-and-go-to-market,priority:medium,analytics,tenant",E6 Piloto & Go-to-market
+Webhooks merchants,Notificaciones de errores/caídas de endpoints del cliente.,"type:task,e6-piloto-and-go-to-market,priority:low,webhooks,portal",E6 Piloto & Go-to-market
+Dispatcher AEAT (opcional),"Cliente SOAP con colas, reintentos, DLQ; acuses a S3 WORM.","type:task,e6-piloto-and-go-to-market,priority:low,aeat,soap,compliance",E6 Piloto & Go-to-market
+Compliance pack,"DPA, políticas GDPR, evidencias WORM, controles ISO 27001 iniciales.","type:task,e6-piloto-and-go-to-market,priority:high,compliance,gdpr,iso27001",E6 Piloto & Go-to-market
