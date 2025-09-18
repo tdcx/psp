@@ -1,0 +1,18 @@
+# BFF API (Go, Gin)
+Single-service start. Reverse proxies to upstreams and provides basic middleware.
+
+## Env
+```
+PORT=3000
+UPSTREAM_SIF=http://localhost:3001
+UPSTREAM_PAYMENTS=http://localhost:3002
+CORS_ALLOW_ORIGINS=*
+RATE_LIMIT_RPS=10
+RATE_LIMIT_BURST=20
+LOG_LEVEL=info
+```
+
+## Run
+```
+make dev
+```
